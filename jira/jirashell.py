@@ -22,6 +22,7 @@ import os
 import requests
 from requests_oauthlib import OAuth1
 from sys import exit
+from magics import JiraMagics
 
 import webbrowser
 
@@ -250,9 +251,20 @@ def main():
     jira = JIRA(options=options, basic_auth=basic_auth, oauth=oauth)
 
     from IPython.frontend.terminal.embed import InteractiveShellEmbed
+    from IPython.terminal.prompts import Prompts, Token
+
+    class JiraPrompt(Prompts):
+        def in_prompt_tokens(self, cli=None):
+            return [
+                (Token, options['server']),
+                (Token.Prompt, ' >>> '),
+            ]
 
     ipshell = InteractiveShellEmbed(
         banner1='<JIRA Shell ' + __version__ + ' (' + jira.client_info() + ')>')
+    ipshell.prompts = JiraPrompt(ipshell)
+    magics = JiraMagics(ipshell, jira)
+    ipshell.register_magics(magics)
     ipshell("*** JIRA shell active; client is in 'jira'."
             ' Press Ctrl-D to exit.')
 
