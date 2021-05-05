@@ -21,6 +21,8 @@ from urllib.parse import parse_qsl
 from jira import JIRA, __version__
 
 import configparser
+from sys import exit
+from jira.magics import JiraMagics
 
 
 CONFIG_PATH = os.path.join(os.path.expanduser("~"), ".jira-python", "jirashell.ini")
@@ -361,9 +363,20 @@ def main():
         else:
             from IPython.frontend.terminal.embed import InteractiveShellEmbed
 
+        from IPython.terminal.prompts import Prompts, Token
+
         ip_shell = InteractiveShellEmbed(
             banner1="<Jira Shell " + __version__ + " (" + jira.client_info() + ")>"
         )
+        class JiraPrompt(Prompts):
+            def in_prompt_tokens(self, cli=None):
+                return [
+                    (Token, options['server']),
+                    (Token.Prompt, ' >>> '),
+                ]
+        ip_shell.prompts = JiraPrompt(ip_shell)
+        magics = JiraMagics(ip_shell, jira)
+        ip_shell.register_magics(magics)
         ip_shell("*** Jira shell active; client is in 'jira'." " Press Ctrl-D to exit.")
     except Exception as e:
         print(e, file=sys.stderr)
