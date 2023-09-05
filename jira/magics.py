@@ -49,7 +49,7 @@ def docoptwrapper(function):
 class JiraMagics(Magics):
     "Magics that hold additional state"
 
-    def __init__(self, shell, jira):
+    def __init__(self, shell, jira, user_map=None, field_map=None):
         # You must call the parent constructor
         super().__init__(shell)
         self.jira = jira
@@ -57,30 +57,8 @@ class JiraMagics(Magics):
         self.load_sprints()
         if shell:
             self.shell.user_ns["boards"] = self.boards
-        self.USERS = {
-            "sue": "5b5587607501ba2d6ea64178",
-            "john": "5ae2734c424d6b2e29a09fd4",
-            "dl": "5b8894114d21642beb80e399",
-            "vinh": "557058:3dd1d88e-2649-473a-9e8b-0671237c77dc",
-            "joao": "5d895e4a4831170dbc8f0e77",
-            "narsing": "5cf4ba8198b1560e859973b3",
-            "ganesh": "5cf4ba8198b1560e859973b3",
-            "steven": "557058:61e4c007-f72f-4500-870e-594e73520785",
-            "ivana": "5f9631be81b288007899caa1",
-        }
-        self.FIELD_MAP = {
-            "key": "key",
-            "summary": "fields.summary",
-            "description": "fields.description",
-            "reporter": "fields.reporter.displayName",
-            "assignee": "fields.assignee.displayName",
-            "status": "fields.status.name",
-            "sprint": "fields.currentSprint",
-            "labels": "fields.labels",
-            "project": "fields.project.key",
-            "issuetype": "fields.issuetype.name",
-            "tester": "customfield_10500.displayName",
-        }
+        self.user_map = user_map
+        self.FIELD_MAP = field_map
 
     @line_magic
     def load_sprints(self, line=None):
@@ -239,7 +217,7 @@ class JiraMagics(Magics):
         print(highlight(yml, YamlLexer(), Terminal256Formatter()))
 
     def resolve_user(self, user):
-        return self.USERS.get(user, user)
+        return self.user_map.get(user, user)
 
     @line_magic
     @docoptwrapper
@@ -405,7 +383,7 @@ class JiraMagics(Magics):
         print(
             self.jira.assign_issue(
                 self.jira.issue(args["<id>"]),
-                account_id=self.USERS.get(args["<nick>"], args["<nick>"]),
+                account_id=self.user_map.get(args["<nick>"], args["<nick>"]),
             )
         )
 
@@ -425,7 +403,7 @@ class JiraMagics(Magics):
                 self.jira.issue(args["<id>"]),
                 regex.sub(
                     lambda x: "[~accountid:%s]"
-                    % self.USERS.get(x.groups()[0], x.groups()[0]),
+                    % self.user_map.get(x.groups()[0], x.groups()[0]),
                     args["<comment>"],
                 ),
             )

@@ -8,9 +8,11 @@ over HTTP BASIC or Kerberos.
 
 import argparse
 import os
+from os.path import expanduser, join
 import sys
 import webbrowser
 from getpass import getpass
+import yaml
 
 import keyring
 import requests
@@ -23,19 +25,26 @@ from jira import JIRA, __version__
 import configparser
 from sys import exit
 from jira.magics import JiraMagics
+from IPython.core.application import BaseIPythonApplication
+
+CONFIG_DIR = join(expanduser("~"), ".jira-python")
+CONFIG_PATH = join(CONFIG_DIR, "jirashell.ini")
 
 
-CONFIG_PATH = os.path.join(os.path.expanduser("~"), ".jira-python", "jirashell.ini")
-
-
-def oauth_dance(server, consumer_key, key_cert_data, print_tokens=False, verify=None):
+def oauth_dance(
+    server, consumer_key, key_cert_data, print_tokens=False, verify=None
+):
     if verify is None:
         verify = server.startswith("https")
 
     # step 1: get request tokens
-    oauth = OAuth1(consumer_key, signature_method=SIGNATURE_RSA, rsa_key=key_cert_data)
+    oauth = OAuth1(
+        consumer_key, signature_method=SIGNATURE_RSA, rsa_key=key_cert_data
+    )
     r = requests.post(
-        server + "/plugins/servlet/oauth/request-token", verify=verify, auth=oauth
+        server + "/plugins/servlet/oauth/request-token",
+        verify=verify,
+        auth=oauth,
     )
     request = dict(parse_qsl(r.text))
     request_token = request["oauth_token"]
@@ -81,14 +90,18 @@ def oauth_dance(server, consumer_key, key_cert_data, print_tokens=False, verify=
         resource_owner_secret=request_token_secret,
     )
     r = requests.post(
-        server + "/plugins/servlet/oauth/access-token", verify=verify, auth=oauth
+        server + "/plugins/servlet/oauth/access-token",
+        verify=verify,
+        auth=oauth,
     )
     access = dict(parse_qsl(r.text))
 
     if print_tokens:
         print("Access tokens received.")
         print("    Access token:        {}".format(access["oauth_token"]))
-        print("    Access token secret: {}".format(access["oauth_token_secret"]))
+        print(
+            "    Access token secret: {}".format(access["oauth_token_secret"])
+        )
 
     return {
         "access_token": access["oauth_token"],
@@ -106,7 +119,9 @@ def process_config():
     try:
         parser.read(CONFIG_PATH)
     except configparser.ParsingError as err:
-        print("Couldn't read config file at path: {}\n{}".format(CONFIG_PATH, err))
+        print(
+            "Couldn't read config file at path: {}\n{}".format(CONFIG_PATH, err)
+        )
         raise
 
     if parser.has_section("options"):
@@ -165,12 +180,16 @@ def process_command_line():
     )
 
     jira_group.add_argument(
-        "--no-verify", action="store_true", help="do not verify the ssl certificate"
+        "--no-verify",
+        action="store_true",
+        help="do not verify the ssl certificate",
     )
 
     basic_auth_group = parser.add_argument_group("BASIC auth options")
     basic_auth_group.add_argument(
-        "-u", "--username", help="The username to connect to this Jira instance with."
+        "-u",
+        "--username",
+        help="The username to connect to this Jira instance with.",
     )
     basic_auth_group.add_argument(
         "-p", "--password", help="The password associated with this user."
@@ -189,7 +208,9 @@ def process_command_line():
         action="store_true",
         help="Start a 3-legged OAuth authentication dance with Jira.",
     )
-    oauth_group.add_argument("-ck", "--consumer-key", help="OAuth consumer key.")
+    oauth_group.add_argument(
+        "-ck", "--consumer-key", help="OAuth consumer key."
+    )
     oauth_group.add_argument(
         "-k",
         "--key-cert",
@@ -210,7 +231,9 @@ def process_command_line():
         "-at", "--access-token", help="OAuth access token for the user."
     )
     oauth_already_group.add_argument(
-        "-ats", "--access-token-secret", help="Secret for the OAuth access token."
+        "-ats",
+        "--access-token-secret",
+        help="Secret for the OAuth access token.",
     )
 
     kerberos_group = parser.add_argument_group("Kerberos options")
@@ -289,7 +312,12 @@ def process_command_line():
 def get_config():
     options, basic_auth, oauth, kerberos_auth = process_config()
 
-    cmd_options, cmd_basic_auth, cmd_oauth, cmd_kerberos_auth = process_command_line()
+    (
+        cmd_options,
+        cmd_basic_auth,
+        cmd_oauth,
+        cmd_kerberos_auth,
+    ) = process_command_line()
 
     options.update(cmd_options)
     basic_auth.update(cmd_basic_auth)
@@ -302,7 +330,10 @@ def get_config():
 def handle_basic_auth(auth, server):
     if auth.get("password"):
         password = auth["password"]
-        if input("Would you like to remember password in OS keyring? (y/n)") == "y":
+        if (
+            input("Would you like to remember password in OS keyring? (y/n)")
+            == "y"
+        ):
             keyring.set_password(server, auth["username"], password)
     else:
         print("Getting password from keyring...")
@@ -324,7 +355,9 @@ def main():
         options, basic_auth, oauth, kerberos_auth = get_config()
 
         if basic_auth:
-            basic_auth = handle_basic_auth(auth=basic_auth, server=options["server"])
+            basic_auth = handle_basic_auth(
+                auth=basic_auth, server=options["server"]
+            )
 
         if oauth.get("oauth_dance") is True:
             oauth = oauth_dance(
@@ -364,20 +397,45 @@ def main():
             from IPython.frontend.terminal.embed import InteractiveShellEmbed
 
         from IPython.terminal.prompts import Prompts, Token
+        from IPython.core.profiledir import ProfileDir
+
+        profile_dir = ProfileDir.create_profile_dir(
+            CONFIG_DIR,
+        )
 
         ip_shell = InteractiveShellEmbed(
-            banner1="<Jira Shell " + __version__ + " (" + jira.client_info() + ")>"
+            banner1="<Jira Shell "
+            + __version__
+            + " ("
+            + jira.client_info()
+            + ")>",
+            hist_file=join(CONFIG_DIR, "history.sqlite"),
+            profile_dir=profile_dir,
         )
+
         class JiraPrompt(Prompts):
             def in_prompt_tokens(self, cli=None):
                 return [
-                    (Token, options['server']),
-                    (Token.Prompt, ' >>> '),
+                    (Token, options["server"]),
+                    (Token.Prompt, " >>> "),
                 ]
+
         ip_shell.prompts = JiraPrompt(ip_shell)
-        magics = JiraMagics(ip_shell, jira)
+        magics = JiraMagics(
+            ip_shell,
+            jira,
+            user_map=yaml.safe_load(
+                open(join(CONFIG_DIR, "user_map.yaml")).read()
+            ),
+            field_map=yaml.safe_load(
+                open(join(CONFIG_DIR, "field_map.yaml")).read()
+            ),
+        )
         ip_shell.register_magics(magics)
-        ip_shell("*** Jira shell active; client is in 'jira'." " Press Ctrl-D to exit.")
+        ip_shell(
+            "*** Jira shell active; client is in 'jira'."
+            " Press Ctrl-D to exit."
+        )
     except Exception as e:
         print(e, file=sys.stderr)
         return 2
